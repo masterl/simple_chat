@@ -3,6 +3,8 @@
 *.exe
 *.bin
 *.app
+sc_client
+sc_server
 
 # Compiled object files #
 #########################
