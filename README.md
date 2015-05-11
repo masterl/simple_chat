@@ -5,3 +5,8 @@
    - **See LICENSE file**
 
 Playing around with sockets
+
+Program uses TCP
+
+#### Running server:
+./sc_server < port >
