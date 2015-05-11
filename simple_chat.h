@@ -3,18 +3,21 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <limits.h>
 
 #define SC_MAX_LISTEN_BACKLOG 5
 #define SC_BUFFER_SIZE 512
 
 enum
 {
-    SC_INVALID_PORT = -1,
-    SC_RANGE_ERROR = -2,
-    SC_SOCKET_OPEN_ERROR = -3
+    SC_INVALID_PORT = INT_MIN,
+    SC_RANGE_ERROR,
+    SC_SOCKET_OPEN_ERROR,
+    SC_HOST_NOT_FOUND,
+    SC_CONNECT_ERROR
 };
 
-typedef enum __sc_status
+typedef enum
 {
     SC_OK = 0
 } SC_status_t;
@@ -44,6 +47,7 @@ typedef struct __sc_server
 typedef struct __sc_client
 {
     int socket;         /* Client's socket file descriptor */
+    struct hostent *server;
     struct sockaddr_in
         address;
     char buffer[SC_BUFFER_SIZE];
@@ -55,6 +59,9 @@ void print_error(char *msg);
 char* read_from_client(SC_Client *client);
 int write_to_client(SC_Client *client,char *message);
 
+char* read_from_server(SC_Client *client);
+int write_to_server(SC_Client *client,char *message);
+
 SC_Server* create_sc_server(void);
 void destroy_sc_server(SC_Server *server);
 int init_sc_server(SC_Server *server,char *port);
@@ -63,5 +70,6 @@ SC_Client* sc_accept_connection(SC_Server *server);
 
 SC_Client* create_sc_client(void);
 void destroy_sc_client(SC_Client *client);
+int connect_to_host(SC_Client *client,char *host,char *port);
 
 #endif

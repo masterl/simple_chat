@@ -22,55 +22,50 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <strings.h>
+#include <string.h>
 
 #include "simple_chat.h"
 
 int main(int argc, char *argv[])
 {
-    char *msg;
-    int bytes_written;
+    int n;
+    char buffer[256];
+    char *message;
 
-    SC_Server *server;
     SC_Client *client;
 
-    if (argc < 2)
+    if(argc < 3)
     {
-        fprintf(stderr,"Usage:\n\t%s <port>\n",argv[0]);
-        exit(1);
+        fprintf(stderr,"Usage:\n\t%s <hostname> <port>\n", argv[0]);
+        exit(0);
     }
 
-    server = create_sc_server();
+    client = create_sc_client();
 
-    if(init_sc_server(server,argv[1]) != SC_OK)
+    if(connect_to_host(client,argv[1],argv[2]) != SC_OK)
     {
-        printf("Couldn't init simple chat server!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if(start_sc_server(server) != SC_OK)
-    {
-        print_error("Couldn't start server");
+        print_error("ERROR connecting");
     }
     else
     {
-        client = sc_accept_connection(server);
-
-        if(client != NULL)
+        printf("Please enter the message: ");
+        memset(buffer,'\0',256);
+        fgets(buffer,255,stdin);
+        n = write_to_server(client,buffer);
+        if (n < 0) 
         {
-            msg = read_from_client(client);
-            printf("Here is the message: %s\n",msg);
-            bytes_written = write_to_client(client,"I got your message");
-            if(bytes_written < 0)
-            {
-                print_error("ERROR writing to socket");
-            }
+            error("ERROR writing to socket");
         }
+
+        message = read_from_server(client);
+        if (message == NULL)
+        {
+            error("ERROR reading from socket");
+        }
+        printf("%s\n",message);
     }
 
-    destroy_sc_server(server);
+    destroy_sc_client(client);
 
     return EXIT_SUCCESS;
-
-    return 0; 
 }

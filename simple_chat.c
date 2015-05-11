@@ -5,6 +5,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <netdb.h>
 
 void error(char *msg)
 {
@@ -76,11 +77,30 @@ int validade_and_convert_port(char *port)
     return port_number;
 }
 
+int sc_write_to_socket(int socket,char *message)
+{
+    int bytes_written;
+
+    bytes_written = write(socket,message,strlen(message));
+
+    return bytes_written;
+}
+
+int sc_read_from_socket(int socket,char *buffer,int buffer_size)
+{
+    int bytes_read;
+
+    memset(buffer,'\0',buffer_size);
+    bytes_read = read(socket,buffer,255);
+
+    return bytes_read;
+}
+
 char* read_from_client(SC_Client *client)
 {
     int bytes_read;
-    memset(client->buffer,'\0',SC_BUFFER_SIZE);
-    bytes_read = read(client->socket,client->buffer,255);
+
+    bytes_read = sc_read_from_socket(client->socket,client->buffer,SC_BUFFER_SIZE);
     if (bytes_read < 0)
     {
         print_error("ERROR reading from socket");
@@ -92,11 +112,26 @@ char* read_from_client(SC_Client *client)
 
 int write_to_client(SC_Client *client,char *message)
 {
-    int bytes_written;
+    return sc_write_to_socket(client->socket,message);
+}
 
-    bytes_written = write(client->socket,message,strlen(message));
+char* read_from_server(SC_Client *client)
+{
+    int bytes_read;
 
-    return bytes_written;
+    bytes_read = sc_read_from_socket(client->socket,client->buffer,SC_BUFFER_SIZE);
+    if (bytes_read < 0)
+    {
+        print_error("ERROR reading from socket");
+        return NULL;
+    }
+
+    return client->buffer;
+}
+
+int write_to_server(SC_Client *client,char *message)
+{
+    return sc_write_to_socket(client->socket,message);
 }
 
 SC_Server* create_sc_server(void)
@@ -208,4 +243,45 @@ void destroy_sc_client(SC_Client *client)
         close(client->socket);
     }
     free(client);
+}
+
+int connect_to_host(SC_Client *client,char *host,char *port)
+{
+    struct hostent *server;
+    int port_number = validade_and_convert_port(port);
+
+    if(port_number < 0)
+    {
+        return port_number;
+    }
+
+    client->socket = socket(AF_INET, SOCK_STREAM, 0);
+    if(client->socket < 0)
+    {
+        print_error("ERROR opening socket");
+        return SC_SOCKET_OPEN_ERROR;
+    }
+
+    /*
+        The gethostbyname*(), gethostbyaddr*(), herror(), and hstrerror() functions are obsolete.  Applications
+        should use getaddrinfo(3), getnameinfo(3), and gai_strerror(3) instead.
+    */
+    server = gethostbyname(host);
+    if(server == NULL)
+    {
+        fprintf(stderr,"ERROR, no such host\n");
+        return SC_HOST_NOT_FOUND;
+    }
+
+    memcpy( (char *)&client->address.sin_addr.s_addr,
+            (char *)server->h_addr,
+            server->h_length);
+
+    client->address.sin_port = htons(port_number);
+    if(connect(client->socket,(struct sockaddr *)&client->address,sizeof(struct sockaddr_in)) < 0)
+    {
+        return SC_CONNECT_ERROR;
+    }
+
+    return SC_OK;
 }
