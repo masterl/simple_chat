@@ -306,15 +306,15 @@ void get_address_str(struct sockaddr_storage *address,char *address_str,size_t s
                 str_size);
 }
 
-int sc_accept(SC_Connection *server)
+int sc_accept(SC_Connection *server,SC_Connection *peer)
 {
     struct sockaddr_storage peer_address;
     socklen_t sin_size = sizeof(struct sockaddr_storage);
     char peer_address_str[INET6_ADDRSTRLEN];
 
-    server->peer_socket = accept(server->socket, (struct sockaddr *)&peer_address, &sin_size);
+    peer->socket = accept(server->socket, (struct sockaddr *)&peer_address, &sin_size);
 
-    if(server->peer_socket == -1)
+    if(peer->socket == -1)
     {
         perror("accept");
         return SC_ACCEPT_ERROR;

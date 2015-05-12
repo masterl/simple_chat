@@ -21,6 +21,7 @@ Up until now, client just connects, sends the message and closes. Server keeps r
  - [X] Done for server!
 - [ ] SC_Client and SC_Server are almost identical, maybe use a single struct...
 - [ ] Remove some duplication
+ - [X] Each endpoint now holds it's socket file descriptor and a buffer
 - [ ] Keep communication loop
  - [X] Done for server
 - [ ] Improve error handling

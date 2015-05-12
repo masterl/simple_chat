@@ -28,7 +28,6 @@ typedef enum
 typedef struct
 {
     int socket;
-    int peer_socket;
     char buffer[SC_BUFFER_SIZE];
 }SC_Connection;
 
@@ -72,6 +71,6 @@ int connect_to_host(SC_Client *client,char *host,char *port);
 // ============= SERVER =============
 int init_sc_server(SC_Connection *server,char *port);
 int sc_listen(SC_Connection *server);
-int sc_accept(SC_Connection *server);
+int sc_accept(SC_Connection *server,SC_Connection *peer);
 
 #endif

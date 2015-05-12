@@ -31,7 +31,8 @@
 
 int main(int argc, char *argv[])
 {
-    SC_Connection connection;
+    SC_Connection server;
+    SC_Connection peer;
 
     if (argc < 2)
     {
@@ -39,13 +40,13 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    if(init_sc_server(&connection,argv[1]) != SC_OK)
+    if(init_sc_server(&server,argv[1]) != SC_OK)
     {
         fprintf(stderr,"server: couldn't initiate server\n");
         exit(EXIT_FAILURE);
     }
 
-    if(sc_listen(&connection) != SC_OK)
+    if(sc_listen(&server) != SC_OK)
     {
         exit(EXIT_FAILURE);
     }
@@ -54,22 +55,22 @@ int main(int argc, char *argv[])
 
     while(1)
     {
-        if(sc_accept(&connection) != SC_OK)
+        if(sc_accept(&server,&peer) != SC_OK)
         {
             perror("accept");
             continue;
         }
 
 
-        if(send(connection.peer_socket, "Hello, world!", 13, 0) == -1)
+        if(send(peer.socket, "Hello, world!", 13, 0) == -1)
         {
             perror("send");
         }
 
-        close(connection.peer_socket);
+        close(peer.socket);
     }
 
-    close(connection.socket);
+    close(server.socket);
 
     return 0;
 }
