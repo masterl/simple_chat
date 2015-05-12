@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 
 void error(char *msg)
 {
@@ -29,20 +30,6 @@ void init_client(SC_Client *client)
     client->address.sin_family = AF_INET;   /* IPV4 */
 
     client->socket = -1;
-}
-
-void init_server(SC_Server *server)
-{
-    if(server == NULL)
-    {
-        return;
-    }
-
-    memset(server,0,sizeof(SC_Server));
-    server->address.sin_family = AF_INET;           /* IPV4 */
-    server->address.sin_addr.s_addr = INADDR_ANY;   /* accept any IP */
-
-    server->socket = -1;
 }
 
 // 1-65535  all ports
@@ -134,89 +121,6 @@ int write_to_server(SC_Client *client,char *message)
     return sc_write_to_socket(client->socket,message);
 }
 
-SC_Server* create_sc_server(void)
-{
-    SC_Server *new_server;
-
-    new_server = (SC_Server *) malloc(sizeof(SC_Server));
-
-    if(new_server != NULL)
-    {
-        init_server(new_server);
-        new_server->socket = socket(AF_INET, SOCK_STREAM, 0);
-    }
-
-    return new_server;
-}
-
-void destroy_sc_server(SC_Server *server)
-{
-    if(server == NULL)
-    {
-        return;
-    }
-
-    if(server->socket > 0)
-    {
-        close(server->socket);
-    }
-    free(server);
-}
-
-int init_sc_server(SC_Server *server,char *port)
-{
-    int port_number = validade_and_convert_port(port);
-
-    if(port_number < 0)
-    {
-        return port_number;
-    }
-
-    if(server->socket < 0)
-    {
-        return SC_SOCKET_OPEN_ERROR;
-    }
-
-    server->address.sin_port = htons(port_number);
-
-    if( bind(server->socket, (struct sockaddr *) &server->address, sizeof(server->address)) < 0)
-    {
-        error("ERROR on binding");
-    }
-
-    return SC_OK;
-}
-
-int start_sc_server(SC_Server *server)
-{
-    return listen(server->socket,SC_MAX_LISTEN_BACKLOG);
-}
-
-SC_Client* sc_accept_connection(SC_Server *server)
-{
-    SC_Client *client;
-    socklen_t client_length = sizeof(struct sockaddr_in);
-
-    client = create_sc_client();
-
-    if(client != NULL)
-    {
-        // int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
-
-        client->socket = accept(server->socket, (struct sockaddr *) &client->address, &client_length);
-
-        if(client->socket < 0)
-        {
-            print_error("ERROR accepting connection");
-            destroy_sc_client(client);
-            client = NULL;
-        }
-    }
-
-    return client;
-}
-
-
 SC_Client* create_sc_client(void)
 {
     SC_Client *new_client;
@@ -282,6 +186,142 @@ int connect_to_host(SC_Client *client,char *host,char *port)
     {
         return SC_CONNECT_ERROR;
     }
+
+    return SC_OK;
+}
+
+
+//  ============== SERVER ==============
+
+// get sockaddr, IPv4 or IPv6:
+void *get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET)
+    {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    }
+
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+void sc_set_server_hints(struct addrinfo *hints)
+{
+    memset(hints, 0, sizeof(struct addrinfo));
+    hints->ai_family = AF_UNSPEC;        // Allow IPV4 and IPV6
+    hints->ai_socktype = SOCK_STREAM;    // TCP
+
+    // If the AI_PASSIVE flag is specified in hints.ai_flags,
+    // and node is NULL,
+    // then the returned socket addresses will be suitable for
+    // bind(2)ing a socket that will accept(2) connections.
+    hints->ai_flags = AI_PASSIVE;
+}
+
+int init_sc_server(SC_Connection *server,char *port)
+{
+    struct addrinfo hints;
+    struct addrinfo *result_list, *node;
+    int result;
+    int yes = 1;
+
+    sc_set_server_hints(&hints);
+
+    result = getaddrinfo(NULL, port, &hints, &result_list);
+
+    if(result != 0)
+    {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(result));
+        return SC_HOST_NOT_FOUND;
+    }
+
+    // loop through all the results trying to bind
+    for(node = result_list; node != NULL; node = node->ai_next)
+    {
+        if((server->socket = socket(node->ai_family,
+                                    node->ai_socktype,
+                                    node->ai_protocol)) == -1)
+        {
+            perror("server: socket");
+            continue;
+        }
+
+        /* int setsockopt(  int sockfd,
+                            int level,
+                            int optname,
+                            const void *optval,
+                            socklen_t optlen);
+            Sets REUSEADDR on the socket (yes == 1)
+        */
+        if(setsockopt(server->socket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1)
+        {
+            perror("setsockopt");
+
+            // Free linked list
+            freeaddrinfo(result_list);
+            return SC_SET_SOCKET_OPTION_ERROR;
+        }
+
+        if(bind(server->socket, node->ai_addr, node->ai_addrlen) == -1)
+        {
+            close(server->socket);
+            perror("server: bind");
+            continue;
+        }
+
+        break;
+    }
+
+    if(result_list != NULL)
+    {
+        // Free linked list
+        freeaddrinfo(result_list);
+    }
+
+    if(node == NULL)
+    {
+        fprintf(stderr, "server: failed to bind\n");
+        return 2;
+    }
+
+    return SC_OK;
+}
+
+int sc_listen(SC_Connection *server)
+{
+    if(listen(server->socket, SC_MAX_LISTEN_BACKLOG) == -1)
+    {
+        perror("server(listen)");
+        return SC_LISTEN_ERROR;
+    }
+
+    return SC_OK;
+}
+
+void get_address_str(struct sockaddr_storage *address,char *address_str,size_t str_size)
+{
+    /* convert IPv4 and IPv6 addresses from binary to text form */
+    inet_ntop(  address->ss_family,
+                get_in_addr((struct sockaddr *)address),
+                address_str,
+                str_size);
+}
+
+int sc_accept(SC_Connection *server)
+{
+    struct sockaddr_storage peer_address;
+    socklen_t sin_size = sizeof(struct sockaddr_storage);
+    char peer_address_str[INET6_ADDRSTRLEN];
+
+    server->peer_socket = accept(server->socket, (struct sockaddr *)&peer_address, &sin_size);
+
+    if(server->peer_socket == -1)
+    {
+        perror("accept");
+        return SC_ACCEPT_ERROR;
+    }
+
+    get_address_str(&peer_address,peer_address_str,sizeof(peer_address_str));
+    printf("server: got connection from %s\n", peer_address_str);
 
     return SC_OK;
 }

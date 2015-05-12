@@ -22,55 +22,54 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <strings.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <netdb.h>
+
 
 #include "simple_chat.h"
 
 int main(int argc, char *argv[])
 {
-    char *msg;
-    int bytes_written;
-
-    SC_Server *server;
-    SC_Client *client;
+    SC_Connection connection;
 
     if (argc < 2)
     {
         fprintf(stderr,"Usage:\n\t%s <port>\n",argv[0]);
-        exit(1);
-    }
-
-    server = create_sc_server();
-
-    if(init_sc_server(server,argv[1]) != SC_OK)
-    {
-        printf("Couldn't init simple chat server!\n");
         exit(EXIT_FAILURE);
     }
 
-    if(start_sc_server(server) != SC_OK)
+    if(init_sc_server(&connection,argv[1]) != SC_OK)
     {
-        print_error("Couldn't start server");
+        fprintf(stderr,"server: couldn't initiate server\n");
+        exit(EXIT_FAILURE);
     }
-    else
-    {
-        client = sc_accept_connection(server);
 
-        if(client != NULL)
+    if(sc_listen(&connection) != SC_OK)
+    {
+        exit(EXIT_FAILURE);
+    }
+
+    printf("server: waiting for connections...\n");
+
+    while(1)
+    {
+        if(sc_accept(&connection) != SC_OK)
         {
-            msg = read_from_client(client);
-            printf("Here is the message: %s\n",msg);
-            bytes_written = write_to_client(client,"I got your message");
-            if(bytes_written < 0)
-            {
-                print_error("ERROR writing to socket");
-            }
+            perror("accept");
+            continue;
         }
+
+
+        if(send(connection.peer_socket, "Hello, world!", 13, 0) == -1)
+        {
+            perror("send");
+        }
+
+        close(connection.peer_socket);
     }
 
-    destroy_sc_server(server);
+    close(connection.socket);
 
-    return EXIT_SUCCESS;
-
-    return 0; 
+    return 0;
 }
